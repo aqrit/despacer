@@ -1,700 +1,408 @@
-#ifndef DESPACER_H
-#define DESPACER_H
-
-#include <stdint.h>
-#include <stddef.h>
-
-#include "despacer_tables.h"
-
-int jump_table[256] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-
-/**
-* remove spaces (in-place) from string bytes (UTF-8 or ASCII) containing
-* "howmany"
-* characters (not counting the null character if a C string is used), returns
-* the new number of characters
-* this function does add the null character, you have to do it yourself if you
-* need it.
-*/
-static inline size_t despace(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  for (size_t i = 0; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-static inline size_t faster_despace( char* bytes, size_t howmany )
+size_t despace_simple( void* dst_void, void* src_void, size_t length )
 {
-  size_t i = 0, pos = 0;
-  while( i < howmany )
-  {
-    bytes[pos] = bytes[i++];
-    pos += jump_table[ (unsigned char)bytes[pos] ];
-  }
-  return pos;
-}
-static inline size_t countspaces(const char *bytes, size_t howmany) {
-  size_t count = 0;
-  for (size_t i = 0; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      count ++;
-    }
-  }
-  return count;
-}
-// standard bit twiddling
-#define haszero(v)                                                             \
-  (((v)-UINT64_C(0x0101010101010101)) & ~(v)&UINT64_C(0x8080808080808080))
-
-static inline size_t despace64(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  size_t i = 0;
-  uint64_t word = 0;
-  uint64_t mask1 = ~UINT64_C(0) / 255 * (uint64_t)('\r');
-  uint64_t mask2 = ~UINT64_C(0) / 255 * (uint64_t)('\n');
-  uint64_t mask3 = ~UINT64_C(0) / 255 * (uint64_t)(' ');
-
-  for (; i + 7 < howmany; i += 8) {
-    memcpy(&word, bytes + i, sizeof(word));
-    uint64_t xor1 = word ^ mask1;
-    uint64_t xor2 = word ^ mask2;
-    uint64_t xor3 = word ^ mask3;
-
-    if (haszero(xor1) || haszero(xor2) || haszero(xor3)) {
-      for (int k = 0; k < 8; k++) {
-        char c = bytes[i + k];
-        if (c == '\r' || c == '\n' || c == ' ') {
-          continue;
-        }
-        bytes[pos++] = c;
-      }
-
-    } else {
-      memmove(bytes + pos, bytes + i, sizeof(word));
-      pos += 8;
-    }
-  }
-
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-
-/**
-* remove spaces from string bytes (UTF-8 or ASCII) containing "howmany"
-* characters (not counting the null character if a C string is used), returns
-* the new number of characters
-* this function does add the null character, you have to do it yourself if you
-* need it.
-* Result is stored in "out", where the caller is responsible for memory
-* allocation.
-*/
-static inline size_t despace_to(const char *__restrict__ bytes, size_t howmany,
-                                char *__restrict__ out) {
-  size_t pos = 0;
-  for (size_t i = 0; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    out[pos++] = c;
-  }
-  return pos;
-}
-
-#ifdef __AVX2__
-
-#include <x86intrin.h>
-
-
-#ifndef __clang__
-static inline __m256i _mm256_loadu2_m128i(__m128i const *__addr_hi, __m128i const *__addr_lo) {
-  __m256i __v256 = _mm256_castsi128_si256(_mm_loadu_si128(__addr_lo));
-  return _mm256_insertf128_si256(__v256, _mm_loadu_si128(__addr_hi), 1);
-}
-
-static inline void _mm256_storeu2_m128i(__m128i *__addr_hi, __m128i *__addr_lo, __m256i __a) {
-  __m128i __v128;
-
-  __v128 = _mm256_castsi256_si128(__a);
-  _mm_storeu_si128(__addr_lo, __v128);
-  __v128 = _mm256_extractf128_si256(__a, 1);
-  _mm_storeu_si128(__addr_hi, __v128);
-}
-#endif 
-
-/**
-* remove spaces (in-place) from string bytes (UTF-8 or ASCII) containing
-* "howmany"
-* characters (not counting the null character if a C string is used), returns
-* the new number of characters
-* this function does add the null character, you have to do it yourself if you
-* need it.
-*/
-static inline size_t avx2_despace(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m256i spaces = _mm256_set1_epi8(' ');
-  __m256i newline = _mm256_set1_epi8('\n');
-  __m256i carriage = _mm256_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 31 < howmany; i += 32) {
-    __m256i x = _mm256_loadu_si256((const __m256i *)(bytes + i));
-    // we do it the naive way, could be smarter?
-    __m256i xspaces = _mm256_cmpeq_epi8(x, spaces);
-    __m256i xnewline = _mm256_cmpeq_epi8(x, newline);
-    __m256i xcarriage = _mm256_cmpeq_epi8(x, carriage);
-    __m256i anywhite =
-        _mm256_or_si256(_mm256_or_si256(xspaces, xnewline), xcarriage);
-    if (_mm256_testz_si256(anywhite, anywhite) == 1) { // no white space
-      _mm256_storeu_si256((__m256i *)(bytes + pos), x);
-      pos += 32;
-    } else {
-      // do it the hard way
-      for (size_t j = 0; j < 32; j++) {
-        char c = bytes[i + j];
-        if (c == '\r' || c == '\n' || c == ' ') {
-          continue;
-        }
-        bytes[pos++] = c;
-      }
-    }
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-
-static inline size_t avx2_countspaces(const char *bytes, size_t howmany) {
-  size_t count = 0;
-  __m256i spaces = _mm256_set1_epi8(' ');
-  __m256i newline = _mm256_set1_epi8('\n');
-  __m256i carriage = _mm256_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 31 < howmany; i += 32) {
-    __m256i x = _mm256_loadu_si256((const __m256i *)(bytes + i));
-    // we do it the naive way, could be smarter?
-    __m256i xspaces = _mm256_cmpeq_epi8(x, spaces);
-    __m256i xnewline = _mm256_cmpeq_epi8(x, newline);
-    __m256i xcarriage = _mm256_cmpeq_epi8(x, carriage);
-    __m256i anywhite =
-        _mm256_or_si256(_mm256_or_si256(xspaces, xnewline), xcarriage);
-    count += _mm_popcnt_u32(_mm256_movemask_epi8(anywhite));
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      count ++ ;
-    }
-  }
-  return count;
+	uint8_t* src = (uint8_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	for( ; length != 0; length-- ){
+		uint8_t c = *src++;
+		if( (c != 0x20) && (c != 0x0A) && (c != 0x0D) && (c != 0x09) ){
+			*dst++ = c;
+		}
+	}
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
-#endif
-
-#ifdef __SSE4_1__
-
-#include <x86intrin.h>
-
-/**
-* remove spaces (in-place) from string bytes (UTF-8 or ASCII) containing
-* "howmany"
-* characters (not counting the null character if a C string is used), returns
-* the new number of characters
-* this function does add the null character, you have to do it yourself if you
-* need it.
-*/
-static inline size_t sse4_despace(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    // we do it the naive way, could be smarter?
-    __m128i xspaces = _mm_cmpeq_epi8(x, spaces);
-    __m128i xnewline = _mm_cmpeq_epi8(x, newline);
-    __m128i xcarriage = _mm_cmpeq_epi8(x, carriage);
-    __m128i anywhite = _mm_or_si128(_mm_or_si128(xspaces, xnewline), xcarriage);
-    int mask16 = _mm_movemask_epi8(anywhite);
-    if (mask16 == 0) { // no match!
-      _mm_storeu_si128((__m128i *)(bytes + pos), x);
-      pos += 16;
-    } else {
-      x = _mm_shuffle_epi8(
-          x, _mm_loadu_si128((const __m128i *)despace_mask16 + mask16));
-      _mm_storeu_si128((__m128i *)(bytes + pos), x);
-      pos += 16 - _mm_popcnt_u32(mask16);
-    }
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-
-static inline size_t sse4_despace_branchless(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    __m128i xspaces = _mm_cmpeq_epi8(x, spaces);
-    __m128i xnewline = _mm_cmpeq_epi8(x, newline);
-    __m128i xcarriage = _mm_cmpeq_epi8(x, carriage);
-    __m128i anywhite = _mm_or_si128(_mm_or_si128(xspaces, xnewline), xcarriage);
-    uint64_t mask16 = _mm_movemask_epi8(anywhite);
-    x = _mm_shuffle_epi8(x, *((__m128i *)despace_mask16 + mask16));
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u64(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-
-static inline __m128i cleanm128(__m128i x, __m128i spaces, __m128i newline, __m128i carriage, int * mask16) {
-    __m128i xspaces = _mm_cmpeq_epi8(x, spaces);
-    __m128i xnewline = _mm_cmpeq_epi8(x, newline);
-    __m128i xcarriage = _mm_cmpeq_epi8(x, carriage);
-    __m128i anywhite = _mm_or_si128(_mm_or_si128(xspaces, xnewline), xcarriage);
-    *mask16 = _mm_movemask_epi8(anywhite);
-    return _mm_shuffle_epi8(
-          x, _mm_loadu_si128((const __m128i *)despace_mask16 + *mask16));
-
+size_t despace_setcc( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* src = (uint8_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	for( ; length != 0; length-- ){
+		uint8_t c = *src++;
+		*dst = c;
+		dst += ((c == 0x20) | (c == 0x0A) | (c == 0x0D)) ^ (c != 0x09);
+	}
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
-static inline __m256i cleanm256(__m256i x, __m256i spaces, __m256i newline, __m256i carriage, unsigned int * mask1, unsigned int *mask2) {
-    __m256i xspaces = _mm256_cmpeq_epi8(x, spaces);
-    __m256i xnewline = _mm256_cmpeq_epi8(x, newline);
-    __m256i xcarriage = _mm256_cmpeq_epi8(x, carriage);
-    __m256i anywhite = _mm256_or_si256(_mm256_or_si256(xspaces, xnewline), xcarriage);
-    unsigned int mask32 = _mm256_movemask_epi8(anywhite);
-    unsigned int maskhigh = (mask32) >> 16;
-    unsigned int masklow = (mask32) & 0xFFFF;
-    assert(maskhigh<(1<<16));
-    assert(masklow<(1<<16));
-    *mask1 = masklow;
-    *mask2 = maskhigh;
-    __m256i mask = _mm256_loadu2_m128i((const __m128i *)despace_mask16 + maskhigh, (const __m128i *)despace_mask16 + masklow);
-    return _mm256_shuffle_epi8(
-          x, mask);
+size_t despace_branchless( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* src = (uint8_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
 
-}
-
-static inline size_t avx2_despace_branchless(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-
-  __m256i spaces256 = _mm256_set1_epi8(' ');
-  __m256i newline256 = _mm256_set1_epi8('\n');
-  __m256i carriage256 = _mm256_set1_epi8('\r');
-
-  size_t i = 0;
-  for (; i + 32 - 1 < howmany; i += 32) {
-    __m256i x = _mm256_loadu_si256((const __m256i *)(bytes + i));
-    unsigned int masklow, maskhigh;
-    x = cleanm256(x,spaces256,newline256,carriage256, & masklow, & maskhigh);
-    int offset1 = 16 - _mm_popcnt_u32(masklow);
-    int offset2 = 16 - _mm_popcnt_u32(maskhigh);
-    _mm256_storeu2_m128i((__m128i *)(bytes + pos + offset1), (__m128i *)(bytes + pos ),x);
-    pos += offset1 + offset2;
-  }
-  for (; i + 16 - 1 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16;
-    x = cleanm128(x,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
-}
-static inline size_t avx2_despace_branchless_u2(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-
-  __m256i spaces256 = _mm256_set1_epi8(' ');
-  __m256i newline256 = _mm256_set1_epi8('\n');
-  __m256i carriage256 = _mm256_set1_epi8('\r');
-
-  size_t i = 0;
-  for (; i + 64 - 1 < howmany; i += 64) {
-    __m256i x1, x2;
-    int offset11, offset12, offset21, offset22;
-    unsigned int masklow1, maskhigh1, masklow2, maskhigh2;
-
-    x1 = _mm256_loadu_si256((const __m256i *)(bytes + i));
-    x2 = _mm256_loadu_si256((const __m256i *)(bytes + i + 32));
-
-    x1 = cleanm256(x1,spaces256,newline256,carriage256, & masklow1, & maskhigh1);
-    offset11 = 16 - _mm_popcnt_u32(masklow1);
-    offset12 = 16 - _mm_popcnt_u32(maskhigh1);
-    x2 = cleanm256(x2,spaces256,newline256,carriage256, & masklow2, & maskhigh2);
-    offset21 = 16 - _mm_popcnt_u32(masklow2);
-    offset22 = 16 - _mm_popcnt_u32(maskhigh2);
-
-    _mm256_storeu2_m128i((__m128i *)(bytes + pos + offset11), (__m128i *)(bytes + pos ),x1);
-    pos += offset11 + offset12;
-
-    _mm256_storeu2_m128i((__m128i *)(bytes + pos + offset21), (__m128i *)(bytes + pos ),x2);
-    pos += offset21 + offset22;
-
-  }
-
-  for (; i + 32 - 1 < howmany; i += 32) {
-    unsigned int masklow, maskhigh;
-
-    int offset1, offset2;
-    __m256i x = _mm256_loadu_si256((const __m256i *)(bytes + i));
-    x = cleanm256(x,spaces256,newline256,carriage256, & masklow, & maskhigh);
-    offset1 = 16 - _mm_popcnt_u32(masklow);
-    offset2 = 16 - _mm_popcnt_u32(maskhigh);
-    _mm256_storeu2_m128i((__m128i *)(bytes + pos + offset1), (__m128i *)(bytes + pos ),x);
-    pos += offset1 + offset2;
-  }
-  for (; i + 16 - 1 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16;
-    x = cleanm128(x,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+	for( ; length != 0; length-- ){
+		uint8_t c = *src++;
+		*dst = c;
+		dst += !!((c != 0x20) && (c != 0x0A) && (c != 0x0D) && (c != 0x09));
+	}
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
-static inline size_t sse4_despace_branchless_u4(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-for (; i + 64 - 1 < howmany; i += 64) {
-    __m128i x1 = _mm_loadu_si128((const __m128i *)(bytes + i));
-    __m128i x2 = _mm_loadu_si128((const __m128i *)(bytes + i + 16));
-    __m128i x3 = _mm_loadu_si128((const __m128i *)(bytes + i + 32));
-    __m128i x4 = _mm_loadu_si128((const __m128i *)(bytes + i + 48));
+// branchless explicit
+size_t despace_cmov( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* src = (uint8_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
 
-    int mask16;
-    x1 = cleanm128(x1,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x1);
-    pos += 16 - _mm_popcnt_u32(mask16);
-
-    x2 = cleanm128(x2,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x2);
-    pos += 16 - _mm_popcnt_u32(mask16);
-
-    x3 = cleanm128(x3,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x3);
-    pos += 16 - _mm_popcnt_u32(mask16);
-
-    x4 = cleanm128(x4,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x4);
-    pos += 16 - _mm_popcnt_u32(mask16);
-
-  }
-  for (; i + 16 - 1 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16;
-    x = cleanm128(x,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+	for( ; length != 0; length-- ){
+		uint8_t c = *src++;
+		uint64_t m = ( c > 0x20 ) ? 0xFFFFFFFFFFFFFFFF : 0xFFFFFFFEFFFFD9FF;
+		*dst = c;
+		dst += ((m >> (c & 63)) & 1); 
+		// note: the bitwise-and is needed to avoid "undefined behavior"
+		// unfortunaly, it isn't being optimized away...
+		// but here there seems to be little impact on speed.
+	}
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
-static inline size_t sse4_despace_branchless_u2(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-for (; i + 32 - 1 < howmany; i += 32) {
-    __m128i x1 = _mm_loadu_si128((const __m128i *)(bytes + i));
-    __m128i x2 = _mm_loadu_si128((const __m128i *)(bytes + i + 16));
-    int mask16;
-    x1 = cleanm128(x1,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x1);
-    pos += 16 - _mm_popcnt_u32(mask16);
-
-    x2 = cleanm128(x2,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x2);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i + 16 - 1 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16;
-    x = cleanm128(x,spaces,newline,carriage, & mask16);
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+size_t despace_table( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* src = (uint8_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	static const uint8_t table[256] = { 
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 
+	};
+	for( ; length != 0; length-- ){
+		size_t c = *src++;
+		*dst = (uint8_t)c;
+		dst += table[c];
+	}
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
-static inline size_t sse4_despace_branchless_mask8(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    // we do it the naive way, could be smarter?
-    __m128i xspaces = _mm_cmpeq_epi8(x, spaces);
-    __m128i xnewline = _mm_cmpeq_epi8(x, newline);
-    __m128i xcarriage = _mm_cmpeq_epi8(x, carriage);
-    __m128i anywhite = _mm_or_si128(_mm_or_si128(xspaces, xnewline), xcarriage);
-    int mask16 = _mm_movemask_epi8(anywhite);
-    __m128i m1 =  _mm_loadu_si128((const __m128i *)despace_mask8_1 + (mask16 & 0xFF) );
-    __m128i m2 =  _mm_loadu_si128((const __m128i *)despace_mask8_2 + (mask16 >> 8) );
-     x = _mm_shuffle_epi8(
-          x, _mm_or_si128(m1,m2));
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+size_t despace_block_simple( void* dst_void, void* src_void, size_t length )
+{
+	uint64_t* src = (uint64_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	const uint64_t mask_09 = 0x0909090909090909;
+	const uint64_t mask_0A = 0x0A0A0A0A0A0A0A0A;
+	const uint64_t mask_0D = 0x0D0D0D0D0D0D0D0D;
+	const uint64_t mask_20 = 0x2020202020202020;
+	const uint64_t mask_7F = 0x7F7F7F7F7F7F7F7F;
+	
+	for( ; length >= 8; length-=8 ){
+		uint64_t asrc = *src++;
+		
+		uint64_t mask = asrc & mask_7F;
+		mask = 
+			((mask ^ mask_09) + mask_7F) &
+			((mask ^ mask_20) + mask_7F) &
+			((mask ^ mask_0A) + mask_7F) &
+			((mask ^ mask_0D) + mask_7F);
+		mask = (( mask | asrc ) & ~mask_7F );
+		// mask = bit7 of each byte is set if non-space 
+
+		for( ; mask != 0; mask >>= 8 ){
+			if( ((uint8_t)mask) != 0 ){
+				*dst = (uint8_t)asrc;
+				dst++;
+			}
+			asrc >>= 8;
+		}
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
-/**
-* remove spaces (in-place) from string bytes (UTF-8 or ASCII) containing
-* "howmany"
-* characters (not counting the null character if a C string is used), returns
-* the new number of characters
-* this function does add the null character, you have to do it yourself if you
-* need it.
-*/
-static inline size_t sse4_despace_trail(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i spaces = _mm_set1_epi8(' ');
-  __m128i newline = _mm_set1_epi8('\n');
-  __m128i carriage = _mm_set1_epi8('\r');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    // we do it the naive way, could be smarter?
-    __m128i xspaces = _mm_cmpeq_epi8(x, spaces);
-    __m128i xnewline = _mm_cmpeq_epi8(x, newline);
-    __m128i xcarriage = _mm_cmpeq_epi8(x, carriage);
-    __m128i anywhite = _mm_or_si128(_mm_or_si128(xspaces, xnewline), xcarriage);
-    int mask16 = _mm_movemask_epi8(anywhite);
-    if (mask16 == 0) { // no match!
-      _mm_storeu_si128((__m128i *)(bytes + pos), x);
-      pos += 16;
-    } else {
-      for (int k = 0; k < 16; ++k) {
-        if (mask16 & (1 << k))
-          continue;
-        bytes[pos++] = bytes[i + k];
-      }
-    }
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+size_t despace_block_branchless( void* dst_void, void* src_void, size_t length )
+{
+	uint64_t* src = (uint64_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	const uint64_t mask_09 = 0x0909090909090909;
+	const uint64_t mask_0A = 0x0A0A0A0A0A0A0A0A;
+	const uint64_t mask_0D = 0x0D0D0D0D0D0D0D0D;
+	const uint64_t mask_20 = 0x2020202020202020;
+	const uint64_t mask_7F = 0x7F7F7F7F7F7F7F7F;
+
+	for( ; length >= 8; length-=8 ){
+		uint64_t asrc = *src++;
+
+		uint64_t mask = asrc & mask_7F;
+		mask = 
+			((mask ^ mask_09) + mask_7F) &
+			((mask ^ mask_20) + mask_7F) &
+			((mask ^ mask_0A) + mask_7F) &
+			((mask ^ mask_0D) + mask_7F);
+		mask = (( mask | asrc ) & ~mask_7F ) >> 7;
+		// mask = bit0 of each byte is set if non-space 
+
+		*dst = ((uint8_t)asrc);
+		dst += ((uint8_t)mask);
+		*dst = ((uint8_t)(asrc >> 8));
+		dst += ((uint8_t)(mask >> 8));
+		asrc >>= 16;
+		mask >>= 16;
+		*dst = ((uint8_t)asrc);
+		dst += ((uint8_t)mask);
+		*dst = ((uint8_t)(asrc >> 8));
+		dst += ((uint8_t)(mask >> 8));
+		asrc >>= 16;
+		mask >>= 16;
+		*dst = ((uint8_t)asrc);
+		dst += ((uint8_t)mask);
+		*dst = ((uint8_t)(asrc >> 8));
+		dst += ((uint8_t)(mask >> 8));
+		asrc >>= 16;
+		mask >>= 16;
+		*dst = ((uint8_t)asrc);
+		dst += ((uint8_t)mask);
+		*dst = ((uint8_t)(asrc >> 8));
+		dst += ((uint8_t)(mask >> 8));
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
-#endif
 
-#ifdef __SSE4_2__
+size_t despace_block_mux( void* dst_void, void* src_void, size_t length )
+{
+	uint64_t* src = (uint64_t*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
 
-#include <x86intrin.h>
+	const uint64_t mask_09 = 0x0909090909090909;
+	const uint64_t mask_0A = 0x0A0A0A0A0A0A0A0A;
+	const uint64_t mask_0D = 0x0D0D0D0D0D0D0D0D;
+	const uint64_t mask_20 = 0x2020202020202020;
+	const uint64_t mask_7F = 0x7F7F7F7F7F7F7F7F;
 
-static inline size_t sse42_despace_to(const char *__restrict__ bytes,
-                                      size_t howmany, char *__restrict__ out) {
-  size_t pos = 0;
-  __m128i targetchars =
-      _mm_set_epi8(' ', '\n', '\r', ' ', ' ', '\n', '\r', ' ', ' ', '\n', '\r',
-                   ' ', ' ', '\n', '\r', ' ');
-  size_t i = 0;
-  for (; i + 15 < howmany;) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int result =
-        _mm_cmpestri(targetchars, 3, x, 16,
-                     _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK);
-    i += result + (result < 16);
-    _mm_storeu_si128((__m128i *)(out + pos), x);
-    pos += result;
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    out[pos++] = c;
-  }
-  return pos;
+	for( ; length >= 8; length-=8 ){
+		uint64_t asrc = *src++;
+		size_t ws_cnt = 0;
+
+		uint64_t mask = asrc & mask_7F;
+		mask = 
+			((mask ^ mask_09) + mask_7F) &
+			((mask ^ mask_20) + mask_7F) &
+			((mask ^ mask_0A) + mask_7F) &
+			((mask ^ mask_0D) + mask_7F);
+		mask = ~mask & ~asrc & ~mask_7F;
+		// mask = bit7 of each byte is set if space 
+
+		if(mask != 0){
+			do{
+				uint64_t pattern = (mask ^ (mask - 1)); // lowest set bit and below
+				asrc = (((asrc << 8) & pattern) | (asrc & ~pattern)); // blend
+				ws_cnt++; // count spaces
+				mask &= ~pattern; // zero lowest set bit in mask
+			}while(mask != 0); 
+			asrc >>= ws_cnt*8; // little endian
+		}
+
+		*((uint64_t*)dst) = asrc;
+		dst += (8 - ws_cnt);
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
-static inline size_t sse42_despace(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i targetchars =
-      _mm_set_epi8(' ', '\n', '\r', ' ', ' ', '\n', '\r', ' ', ' ', '\n', '\r',
-                   ' ', ' ', '\n', '\r', ' ');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16 = _mm_cvtsi128_si32(
-        _mm_cmpestrm(targetchars, 3, x, 16,
-                     _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK));
-    if (mask16 == 0) { // no match!
-      _mm_storeu_si128((__m128i *)(bytes + pos), x);
-      pos += 16;
-    } else {
-      x = _mm_shuffle_epi8(
-          x, _mm_loadu_si128((const __m128i *)despace_mask16 + mask16));
-      _mm_storeu_si128((__m128i *)(bytes + pos), x);
-      pos += 16 - _mm_popcnt_u32(mask16);
-    }
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+
+size_t despace_sse2_detect( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* dst = (uint8_t*)dst_void;
+	uint8_t* src = (uint8_t*)src_void;
+	const __m128i mask_09 = _mm_set1_epi8(0x09);
+	const __m128i mask_0A = _mm_set1_epi8(0x0A);
+	const __m128i mask_0D = _mm_set1_epi8(0x0D);
+	const __m128i mask_20 = _mm_set1_epi8(0x20);
+
+	for( ; length >= 16; length-=16 ){
+		__m128i v = _mm_loadu_si128((__m128i*)src);
+		int m = _mm_movemask_epi8(
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_09),
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A), 
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D), 
+			_mm_cmpeq_epi8(v, mask_20)))));
+
+		m = ~m;
+		for( int i = 0; i < 16; i++ ){
+			*dst = *src++;
+			dst += m & 1;
+			m >>= 1;
+		}
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
-static inline size_t sse42_despace_branchless(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i targetchars =
-      _mm_set_epi8(' ', '\n', '\r', ' ', ' ', '\n', '\r', ' ', ' ', '\n', '\r',
-                   ' ', ' ', '\n', '\r', ' ');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16 = _mm_cvtsi128_si32(
-        _mm_cmpestrm(targetchars, 3, x, 16,
-                     _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK));
-    x = _mm_shuffle_epi8(
-          x, _mm_loadu_si128((const __m128i *)despace_mask16 + mask16));
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - _mm_popcnt_u32(mask16);
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
+{
+	__m128i* src = (__m128i*)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+	size_t r;
+
+	const __m128i mask_09 = _mm_set1_epi8(0x09);
+	const __m128i mask_0A = _mm_set1_epi8(0x0A);
+	const __m128i mask_0D = _mm_set1_epi8(0x0D);
+	const __m128i mask_20 = _mm_set1_epi8(0x20);
+	const __m128i mask_01 = _mm_set1_epi8(0x01);
+
+	for( ; length >= 16; length-=16 ){
+		// load
+		__m128i v = _mm_loadu_si128(src);
+		src++;
+
+		// detect spaces
+		__m128i ws = 
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_09),
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A), 
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D), 
+			_mm_cmpeq_epi8(v, mask_20))));
+
+		// prefix sum of spaces
+		__m128i s = _mm_and_si128(mask_01, ws); 
+		s = _mm_add_epi8(s, _mm_slli_si128(s, 1));
+		s = _mm_add_epi8(s, _mm_slli_si128(s, 2));
+		s = _mm_add_epi8(s, _mm_slli_si128(s, 4));
+		s = _mm_add_epi8(s, _mm_slli_si128(s, 8));
+
+		// number of non-space bytes in vector
+		r = 16 - _mm_cvtsi128_si32(_mm_srli_si128(s, 15));
+
+		// zero space bytes in prefix sum
+		s = _mm_andnot_si128(ws, s);
+
+		//
+		__m128i m;
+		__m128i p;
+
+		p = mask_01;
+		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 1);
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 1), m));  
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 1), m));  
+
+		p = _mm_add_epi8(p, p); // mask_02
+		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 2);
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 2), m));  
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 2), m));  
+		
+		p = _mm_add_epi8(p, p); // mask_04
+		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 4);
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 4), m));  
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 4), m));
+
+		p = _mm_add_epi8(p, p); // mask_08
+		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 8);
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 8), m));
+		
+		_mm_storeu_si128((__m128i*)dst, v);
+		dst += r;
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
-static inline size_t sse42_despace_branchless_lookup(char *bytes, size_t howmany) {
-  size_t pos = 0;
-  __m128i targetchars =
-      _mm_set_epi8(' ', '\n', '\r', ' ', ' ', '\n', '\r', ' ', ' ', '\n', '\r',
-                   ' ', ' ', '\n', '\r', ' ');
-  size_t i = 0;
-  for (; i + 15 < howmany; i += 16) {
-    __m128i x = _mm_loadu_si128((const __m128i *)(bytes + i));
-    int mask16 = _mm_cvtsi128_si32(
-        _mm_cmpestrm(targetchars, 3, x, 16,
-                     _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_BIT_MASK));
-    x = _mm_shuffle_epi8(
-          x, _mm_loadu_si128((const __m128i *)despace_mask16 + mask16));
-    _mm_storeu_si128((__m128i *)(bytes + pos), x);
-    pos += 16 - despace_popcnt16[mask16];
-  }
-  for (; i < howmany; i++) {
-    char c = bytes[i];
-    if (c == '\r' || c == '\n' || c == ' ') {
-      continue;
-    }
-    bytes[pos++] = c;
-  }
-  return pos;
+
+size_t despace_ssse3_lut( void* dst_void, void* src_void, size_t length )
+{
+	__m128i * src = (__m128i *)src_void;
+	uint8_t* dst = (uint8_t*)dst_void;
+
+	static const uint8_t table[128][8] = {
+		{0,1,2,3,4,5,6,7}, {1,2,3,4,5,6,7,0}, {0,2,3,4,5,6,7,1}, {2,3,4,5,6,7,0,1},
+		{0,1,3,4,5,6,7,2}, {1,3,4,5,6,7,0,2}, {0,3,4,5,6,7,1,2}, {3,4,5,6,7,0,1,2},
+		{0,1,2,4,5,6,7,3}, {1,2,4,5,6,7,0,3}, {0,2,4,5,6,7,1,3}, {2,4,5,6,7,0,1,3},
+		{0,1,4,5,6,7,2,3}, {1,4,5,6,7,0,2,3}, {0,4,5,6,7,1,2,3}, {4,5,6,7,0,1,2,3},
+		{0,1,2,3,5,6,7,4}, {1,2,3,5,6,7,0,4}, {0,2,3,5,6,7,1,4}, {2,3,5,6,7,0,1,4},
+		{0,1,3,5,6,7,2,4}, {1,3,5,6,7,0,2,4}, {0,3,5,6,7,1,2,4}, {3,5,6,7,0,1,2,4},
+		{0,1,2,5,6,7,3,4}, {1,2,5,6,7,0,3,4}, {0,2,5,6,7,1,3,4}, {2,5,6,7,0,1,3,4},
+		{0,1,5,6,7,2,3,4}, {1,5,6,7,0,2,3,4}, {0,5,6,7,1,2,3,4}, {5,6,7,0,1,2,3,4},
+		{0,1,2,3,4,6,7,5}, {1,2,3,4,6,7,0,5}, {0,2,3,4,6,7,1,5}, {2,3,4,6,7,0,1,5},
+		{0,1,3,4,6,7,2,5}, {1,3,4,6,7,0,2,5}, {0,3,4,6,7,1,2,5}, {3,4,6,7,0,1,2,5},
+		{0,1,2,4,6,7,3,5}, {1,2,4,6,7,0,3,5}, {0,2,4,6,7,1,3,5}, {2,4,6,7,0,1,3,5},
+		{0,1,4,6,7,2,3,5}, {1,4,6,7,0,2,3,5}, {0,4,6,7,1,2,3,5}, {4,6,7,0,1,2,3,5},
+		{0,1,2,3,6,7,4,5}, {1,2,3,6,7,0,4,5}, {0,2,3,6,7,1,4,5}, {2,3,6,7,0,1,4,5},
+		{0,1,3,6,7,2,4,5}, {1,3,6,7,0,2,4,5}, {0,3,6,7,1,2,4,5}, {3,6,7,0,1,2,4,5},
+		{0,1,2,6,7,3,4,5}, {1,2,6,7,0,3,4,5}, {0,2,6,7,1,3,4,5}, {2,6,7,0,1,3,4,5},
+		{0,1,6,7,2,3,4,5}, {1,6,7,0,2,3,4,5}, {0,6,7,1,2,3,4,5}, {6,7,0,1,2,3,4,5},
+		{0,1,2,3,4,5,7,6}, {1,2,3,4,5,7,0,6}, {0,2,3,4,5,7,1,6}, {2,3,4,5,7,0,1,6},
+		{0,1,3,4,5,7,2,6}, {1,3,4,5,7,0,2,6}, {0,3,4,5,7,1,2,6}, {3,4,5,7,0,1,2,6},
+		{0,1,2,4,5,7,3,6}, {1,2,4,5,7,0,3,6}, {0,2,4,5,7,1,3,6}, {2,4,5,7,0,1,3,6},
+		{0,1,4,5,7,2,3,6}, {1,4,5,7,0,2,3,6}, {0,4,5,7,1,2,3,6}, {4,5,7,0,1,2,3,6},
+		{0,1,2,3,5,7,4,6}, {1,2,3,5,7,0,4,6}, {0,2,3,5,7,1,4,6}, {2,3,5,7,0,1,4,6},
+		{0,1,3,5,7,2,4,6}, {1,3,5,7,0,2,4,6}, {0,3,5,7,1,2,4,6}, {3,5,7,0,1,2,4,6},
+		{0,1,2,5,7,3,4,6}, {1,2,5,7,0,3,4,6}, {0,2,5,7,1,3,4,6}, {2,5,7,0,1,3,4,6},
+		{0,1,5,7,2,3,4,6}, {1,5,7,0,2,3,4,6}, {0,5,7,1,2,3,4,6}, {5,7,0,1,2,3,4,6},
+		{0,1,2,3,4,7,5,6}, {1,2,3,4,7,0,5,6}, {0,2,3,4,7,1,5,6}, {2,3,4,7,0,1,5,6},
+		{0,1,3,4,7,2,5,6}, {1,3,4,7,0,2,5,6}, {0,3,4,7,1,2,5,6}, {3,4,7,0,1,2,5,6},
+		{0,1,2,4,7,3,5,6}, {1,2,4,7,0,3,5,6}, {0,2,4,7,1,3,5,6}, {2,4,7,0,1,3,5,6},
+		{0,1,4,7,2,3,5,6}, {1,4,7,0,2,3,5,6}, {0,4,7,1,2,3,5,6}, {4,7,0,1,2,3,5,6},
+		{0,1,2,3,7,4,5,6}, {1,2,3,7,0,4,5,6}, {0,2,3,7,1,4,5,6}, {2,3,7,0,1,4,5,6},
+		{0,1,3,7,2,4,5,6}, {1,3,7,0,2,4,5,6}, {0,3,7,1,2,4,5,6}, {3,7,0,1,2,4,5,6},
+		{0,1,2,7,3,4,5,6}, {1,2,7,0,3,4,5,6}, {0,2,7,1,3,4,5,6}, {2,7,0,1,3,4,5,6},
+		{0,1,7,2,3,4,5,6}, {1,7,0,2,3,4,5,6}, {0,7,1,2,3,4,5,6}, {7,0,1,2,3,4,5,6}};
+
+	const __m128i mask_70 = _mm_set1_epi8( 0x70 );
+	const __m128i mask_20 = _mm_set1_epi8( 0x20 );
+	const __m128i lut_cntrl = _mm_setr_epi8(
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
+
+	for( ; length >= 16; length-=16 ){
+		// load
+		__m128i vector0 = _mm_loadu_si128(src);
+		src++;
+		__m128i vector1 = _mm_unpackhi_epi64(vector0, vector0);
+
+		// detect spaces
+		__m128i bytemask0 = _mm_or_si128(_mm_cmpeq_epi8(mask_20, vector0),
+			_mm_shuffle_epi8(lut_cntrl, _mm_adds_epu8(mask_70, vector0)));
+
+		// sort (compress)
+		int bitmask0 = _mm_movemask_epi8(bytemask0);
+		vector0 = _mm_shuffle_epi8(vector0, 
+			_mm_loadl_epi64((__m128i*)(table[bitmask0 & 0x7F])));
+		vector1 = _mm_shuffle_epi8(vector1, 
+			_mm_loadl_epi64((__m128i*)(table[(bitmask0 >> 8) & 0x7F])));
+
+		// count non-spaces
+		__m128i hsum0 = _mm_sad_epu8( _mm_setzero_si128(), bytemask0 );
+		__m128i hsum1 = _mm_unpackhi_epi64(hsum0, hsum0);
+		size_t popcnt0 = ((uint8_t)( 8 + _mm_cvtsi128_si32(hsum0)));
+		size_t popcnt1 = ((uint8_t)( 8 + _mm_cvtsi128_si32(hsum1)));
+
+		// store
+		_mm_storel_epi64((__m128i*)dst, vector0);
+		dst += popcnt0;
+		_mm_storel_epi64((__m128i*)dst, vector1);
+		dst += popcnt1;
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
 }
-#endif
-#endif
