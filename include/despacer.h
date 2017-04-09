@@ -108,7 +108,7 @@ size_t despace_block_simple( void* dst_void, void* src_void, size_t length )
 			((mask ^ mask_0A) + mask_7F) &
 			((mask ^ mask_0D) + mask_7F);
 		mask = (( mask | asrc ) & ~mask_7F );
-		// mask = bit7 of each byte is set if non-space 
+		// mask = bit7 of each byte is set if non-space
 
 		for( ; mask != 0; mask >>= 8 ){
 			if( ((uint8_t)mask) != 0 ){
@@ -146,7 +146,7 @@ size_t despace_block_branchless( void* dst_void, void* src_void, size_t length )
 			((mask ^ mask_0A) + mask_7F) &
 			((mask ^ mask_0D) + mask_7F);
 		mask = (( mask | asrc ) & ~mask_7F ) >> 7;
-		// mask = bit0 of each byte is set if non-space 
+		// mask = bit0 of each byte is set if non-space
 
 		*dst = ((uint8_t)asrc);
 		dst += ((uint8_t)mask);
@@ -201,7 +201,7 @@ size_t despace_block_mux( void* dst_void, void* src_void, size_t length )
 			((mask ^ mask_0A) + mask_7F) &
 			((mask ^ mask_0D) + mask_7F);
 		mask = ~mask & ~asrc & ~mask_7F;
-		// mask = bit7 of each byte is set if space 
+		// mask = bit7 of each byte is set if space
 
 		if(mask != 0){
 			do{
@@ -209,7 +209,7 @@ size_t despace_block_mux( void* dst_void, void* src_void, size_t length )
 				asrc = (((asrc << 8) & pattern) | (asrc & ~pattern)); // blend
 				ws_cnt++; // count spaces
 				mask &= ~pattern; // zero lowest set bit in mask
-			}while(mask != 0); 
+			}while(mask != 0);
 			asrc >>= ws_cnt*8; // little endian
 		}
 
@@ -237,8 +237,8 @@ size_t despace_sse2_detect( void* dst_void, void* src_void, size_t length )
 		__m128i v = _mm_loadu_si128((__m128i*)src);
 		int m = _mm_movemask_epi8(
 			_mm_or_si128(_mm_cmpeq_epi8(v, mask_09),
-			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A), 
-			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D), 
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A),
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D),
 			_mm_cmpeq_epi8(v, mask_20)))));
 
 		m = ~m;
@@ -273,14 +273,14 @@ size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
 		src++;
 
 		// detect spaces
-		__m128i ws = 
+		__m128i ws =
 			_mm_or_si128(_mm_cmpeq_epi8(v, mask_09),
-			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A), 
-			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D), 
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0A),
+			_mm_or_si128(_mm_cmpeq_epi8(v, mask_0D),
 			_mm_cmpeq_epi8(v, mask_20))));
 
 		// prefix sum of spaces
-		__m128i s = _mm_and_si128(mask_01, ws); 
+		__m128i s = _mm_and_si128(mask_01, ws);
 		s = _mm_add_epi8(s, _mm_slli_si128(s, 1));
 		s = _mm_add_epi8(s, _mm_slli_si128(s, 2));
 		s = _mm_add_epi8(s, _mm_slli_si128(s, 4));
@@ -298,17 +298,17 @@ size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
 
 		p = mask_01;
 		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 1);
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 1), m));  
-		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 1), m));  
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 1), m));
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 1), m));
 
 		p = _mm_add_epi8(p, p); // mask_02
 		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 2);
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 2), m));  
-		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 2), m));  
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 2), m));
+		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 2), m));
 		
 		p = _mm_add_epi8(p, p); // mask_04
 		m = _mm_srli_si128(_mm_cmpeq_epi8(p, _mm_and_si128(p, s)), 4);
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 4), m));  
+		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(_mm_srli_si128(s, 4), m));
 		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_si128(v, 4), m));
 
 		p = _mm_add_epi8(p, p); // mask_08

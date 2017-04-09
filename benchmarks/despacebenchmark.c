@@ -19,14 +19,14 @@ static uint32_t rand_range(uint32_t min, uint32_t max)
 	assert(min <= max);
 	assert((max-min) <= RAND_MAX);
 
-    uint32_t r;
+	uint32_t r;
 	uint32_t n = max - min;
 	uint32_t m = n;
 	m |= m >> 16; m |= m >> 8; m |= m >> 4; m |= m >> 2; m |= m >> 1;
-    do{ 
-        r = ((uint32_t)rand()) & m;
-    }while(r > n);
-    return r + min;
+	do{
+		r = ((uint32_t)rand()) & m;
+	}while(r > n);
+	return r + min;
 }
 
 
@@ -97,9 +97,9 @@ static void fillwithtext(uint8_t* buf, size_t size, size_t num_spaces)
 
 
 // benchmark
-static uint64_t best_time( 
+static uint64_t best_time(
 	size_t (*fn_ptr)(void*,void*,size_t),
-	uint8_t* out, 
+	uint8_t* out,
 	const uint8_t* const in,
 	size_t length )
 {
@@ -152,30 +152,30 @@ int main(int argc, char ** argv)
 	size_t num_spaces = 128;
 	assert(num_spaces <= BUF_SIZE);
 
-	fillwithtext(src, BUF_SIZE, num_spaces);  
+	fillwithtext(src, BUF_SIZE, num_spaces);
 	despace_simple(ans, src, BUF_SIZE);
 
-	test_time( "despace_simple", &despace_simple, 
+	test_time( "despace_simple", &despace_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_setcc", &despace_setcc, 
+	test_time( "despace_setcc", &despace_setcc,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_branchless", &despace_branchless, 
+	test_time( "despace_branchless", &despace_branchless,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_cmov", &despace_cmov, 
+	test_time( "despace_cmov", &despace_cmov,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_table", &despace_table, 
+	test_time( "despace_table", &despace_table,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_block_simple", &despace_block_simple, 
+	test_time( "despace_block_simple", &despace_block_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_block_branchless", &despace_block_branchless, 
+	test_time( "despace_block_branchless", &despace_block_branchless,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_block_mux", &despace_block_mux, 
+	test_time( "despace_block_mux", &despace_block_mux,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum, 
+	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse2_detect", &despace_sse2_detect, 
+	test_time( "despace_sse2_detect", &despace_sse2_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_lut", &despace_ssse3_lut, 
+	test_time( "despace_ssse3_lut", &despace_ssse3_lut,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
 	return 0;
