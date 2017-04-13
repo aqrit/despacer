@@ -7,6 +7,7 @@
 
 #include <emmintrin.h> // sse2
 #include <tmmintrin.h> // ssse3
+#include <smmintrin.h> // sse41
 #include <nmmintrin.h> // sse42
 
 #include "despacer.h"
@@ -171,9 +172,13 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_block_mux", &despace_block_mux,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_sse2_detect", &despace_sse2_detect,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse2_detect", &despace_sse2_detect,
+	test_time( "despace_sse3_cumsum", &despace_sse3_cumsum,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut", &despace_ssse3_lut,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
