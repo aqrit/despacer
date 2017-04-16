@@ -11,6 +11,7 @@
 #include <nmmintrin.h> // sse42
 
 #include "despacer.h"
+#include "useless.h"
 
 
 // generate random number from range 
@@ -135,7 +136,7 @@ static void test_time(
 		printf("BUG!!! "); fflush(0);
 	}
 	uint64_t t = best_time(fn_ptr, out, in, in_len);
-	printf("%6I64d\n", t);
+	printf("%5I64d\n", t);
 }
 
 
@@ -158,8 +159,6 @@ int main(int argc, char ** argv)
 
 	test_time( "despace_simple", &despace_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_setcc", &despace_setcc,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_branchless", &despace_branchless,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_cmov", &despace_cmov,
@@ -168,19 +167,29 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_block_simple", &despace_block_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_block_branchless", &despace_block_branchless,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_block_mux", &despace_block_mux,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_detect", &despace_sse2_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse3_cumsum", &despace_sse3_cumsum,
+	test_time( "despace_ssse3_detect", &despace_ssse3_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut", &despace_ssse3_lut,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+
+	printf("\n%24s\n","---useless---");
+	test_time( "despace_setcc", &despace_setcc,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_block_shift", &despace_block_shift,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_sse42_detect", &despace_sse42_detect,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_sse42_scan", &despace_sse42_scan,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_ssse3_cumsum", &despace_ssse3_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
 	return 0;
