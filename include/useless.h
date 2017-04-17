@@ -54,7 +54,6 @@ size_t despace_block_shift( void* dst_void, void* src_void, size_t length )
 
 
 // pcmpestrm seems slower than the sse3 detection but uses fewer registers
-// pcmpistrm might be faster?
 size_t despace_sse42_detect( void* dst_void, void* src_void, size_t length )
 {
 	uint8_t* dst = (uint8_t*)dst_void;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -136,7 +137,7 @@ static void test_time(
 		printf("BUG!!! "); fflush(0);
 	}
 	uint64_t t = best_time(fn_ptr, out, in, in_len);
-	printf("%5I64d\n", t);
+	printf("%5" PRIu64 "\n", t);
 }
 
 
@@ -175,7 +176,14 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_lut", &despace_ssse3_lut,
+	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_ssse3_lut_1kb", &despace_ssse3_lut_1kb,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	//todo: the current benchmarked is improper
+	// for a table this big...?
+	gen_table_1mb();
+	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
 	printf("\n%24s\n","---useless---");
