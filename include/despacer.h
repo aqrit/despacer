@@ -194,8 +194,6 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 	__m128i* src = (__m128i*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
-	const __m128i mask_70 = _mm_set1_epi8( 0x70 );
-	const __m128i mask_20 = _mm_set1_epi8( 0x20 );
 	const __m128i lut_cntrl = _mm_setr_epi8(
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
@@ -205,6 +203,8 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 	const __m128i mask_01 = _mm_abs_epi8(_mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
 	const __m128i mask_02 = _mm_add_epi8(mask_01, mask_01);
 	const __m128i mask_04 = _mm_slli_epi64(mask_01, 2);
+	const __m128i mask_20 = _mm_slli_epi64(mask_01, 5);
+	const __m128i mask_70 = _mm_set1_epi8(0x70);
 
 	for( ; length >= 16; length-=16 ){
 		// load
@@ -230,19 +230,13 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		s = _mm_andnot_si128(ws, s);
 
 		// compress
-		__m128i m,t;
-		t = _mm_srli_epi64(s, 8);
-		m = _mm_cmpeq_epi8(mask_01, _mm_and_si128(mask_01, t));
-		s = _mm_max_epu8(s, _mm_and_si128(t, m));
-
-		t = _mm_srli_epi64(s, 16);
-		m = _mm_cmpeq_epi8(mask_02, _mm_and_si128(mask_02, t));
-		s = _mm_max_epu8(s, _mm_and_si128(t, m));
-
-		t = _mm_srli_epi64(s, 32);
-		m = _mm_cmpeq_epi8(mask_04, _mm_and_si128(mask_04, t));
-		s = _mm_max_epu8(s, _mm_and_si128(t, m));
-
+		__m128i m;
+		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_01), _mm_setzero_si128());
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 8));
+		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_02), _mm_setzero_si128());
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 16));
+		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_04), _mm_setzero_si128());
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 32));
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(id, s));
 
 		// store
