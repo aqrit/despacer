@@ -172,9 +172,7 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_detect", &despace_sse2_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_detect", &despace_ssse3_detect,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
+	test_time( "despace_ssse3_cumsum", &despace_ssse3_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
@@ -195,9 +193,11 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse42_scan", &despace_sse42_scan,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_ssse3_detect", &despace_ssse3_detect,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_cumsum", &despace_ssse3_cumsum,
+	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
 	return 0;

@@ -97,6 +97,37 @@ size_t despace_sse42_scan( void* dst_void, void* src_void, size_t length )
 }
 
 
+size_t despace_ssse3_detect( void* dst_void, void* src_void, size_t length )
+{
+	uint8_t* dst = (uint8_t*)dst_void;
+	uint8_t* src = (uint8_t*)src_void;
+	const __m128i mask_70 = _mm_set1_epi8( 0x70 );
+	const __m128i mask_20 = _mm_set1_epi8( 0x20 );
+	const __m128i lut_cntrl = _mm_setr_epi8(
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
+
+	for( ; length >= 16; length-=16 ){
+		__m128i v = _mm_loadu_si128((__m128i*)src);
+		int m = _mm_movemask_epi8(
+			_mm_or_si128(_mm_cmpeq_epi8(mask_20, v),
+			_mm_shuffle_epi8(lut_cntrl, _mm_adds_epu8(mask_70, v))));
+
+		m = ~m;
+		for( int i = 0; i < 16; i++ ){
+			*dst = *src++;
+			dst += m & 1;
+			m >>= 1;
+		}
+	}
+
+	// do remaining bytes
+	dst += despace_branchless(dst, src, length);
+
+	return (size_t)(dst - ((uint8_t*)dst_void));
+}
+
+
 // slower than just creating mask with sse2 then using scalar
 size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
 {
@@ -150,8 +181,8 @@ size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
 		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(t, m));
 		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_epi64(v, 16), m));
 
-		p = _mm_add_epi8(p, p); // mask_04
-		t = _mm_srli_epi64(s, 32);
+		// p = just shift and extra bit on the last pass
+		t = _mm_srli_epi64(s, 33);
 		m = _mm_cmpeq_epi8(p, _mm_and_si128(p, t));
 		// s = not needed on last pass
 		v = _mm_or_si128(_mm_andnot_si128(m, v), _mm_and_si128(_mm_srli_epi64(v, 32), m));
@@ -167,7 +198,8 @@ size_t despace_sse2_cumsum( void* dst_void, void* src_void, size_t length )
 }
 
 
-size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
+// same speed as the sse3 version (pblendvb of no help)
+size_t despace_sse41_cumsum( void* dst_void, void* src_void, size_t length )
 {
 	__m128i* src = (__m128i*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
@@ -211,17 +243,17 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		p = mask_01;
 		t = _mm_srli_epi64(s, 8);
 		m = _mm_cmpeq_epi8(p, _mm_and_si128(p, t));
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(t, m));
+		s = _mm_blendv_epi8(s, t, m);
 
 		p = _mm_add_epi8(p, p); // mask_02
 		t = _mm_srli_epi64(s, 16);
 		m = _mm_cmpeq_epi8(p, _mm_and_si128(p, t));
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(t, m));
+		s = _mm_blendv_epi8(s, t, m);
 
 		p = _mm_add_epi8(p, p); // mask_04
 		t = _mm_srli_epi64(s, 32);
 		m = _mm_cmpeq_epi8(p, _mm_and_si128(p, t));
-		s = _mm_or_si128(_mm_andnot_si128(m, s), _mm_and_si128(t, m));
+		s = _mm_blendv_epi8(s, t, m);
 
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(id, s));
 
