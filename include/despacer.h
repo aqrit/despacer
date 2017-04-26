@@ -191,7 +191,7 @@ size_t despace_sse2_detect( void* dst_void, void* src_void, size_t length )
 
 size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 {
-	__m128i* src = (__m128i*)src_void;
+	uint8_t* src = (uint8_t*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
 	const __m128i lut_cntrl = _mm_setr_epi8(
@@ -208,8 +208,8 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 
 	for( ; length >= 16; length-=16 ){
 		// load
-		__m128i v = _mm_loadu_si128(src);
-		src++;
+		__m128i v = _mm_loadu_si128((__m128i*)src);
+		src += 16;
 
 		// detect spaces
 		__m128i ws = _mm_or_si128(_mm_cmpeq_epi8(mask_20, v),
@@ -221,7 +221,7 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		s = _mm_add_epi8(s, _mm_slli_epi64(s, 16));
 		s = _mm_add_epi8(s, _mm_slli_epi64(s, 32));
 
-		//
+		// get non-space byte totals
 		__m128i cnt = _mm_srli_epi64(s, 56);
 		size_t popcnt0 = 8 - _mm_cvtsi128_si32(cnt);
 		size_t popcnt1 = 8 - _mm_cvtsi128_si32(_mm_unpackhi_epi64(cnt, cnt));
@@ -230,13 +230,9 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		s = _mm_andnot_si128(ws, s);
 
 		// compress
-		__m128i m;
-		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_01), _mm_setzero_si128());
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 8));
-		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_02), _mm_setzero_si128());
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 16));
-		m = _mm_cmpgt_epi8(_mm_and_si128(s, mask_04), _mm_setzero_si128());
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(s, m), 32));
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_01, s), _mm_setzero_si128()), s),  8));
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_02, s), _mm_setzero_si128()), s), 16));
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_04, s), _mm_setzero_si128()), s), 32));
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(id, s));
 
 		// store

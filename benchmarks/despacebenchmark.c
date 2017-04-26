@@ -15,58 +15,15 @@
 #include "useless.h"
 
 
-// generate random number from range 
-// (rejection sampling to avoid modulo bias)
-static uint32_t rand_range(uint32_t min, uint32_t max)
+// fill buf with bytes... coinflip to choose either 0x41 or 0x20 
+static void fillwithtext(uint8_t* buf, size_t size)
 {
-	assert(min <= max);
-	assert((max-min) <= RAND_MAX);
-
-	uint32_t r;
-	uint32_t n = max - min;
-	uint32_t m = n;
-	m |= m >> 16; m |= m >> 8; m |= m >> 4; m |= m >> 2; m |= m >> 1;
-	do{
-		r = ((uint32_t)rand()) & m;
-	}while(r > n);
-	return r + min;
-}
-
-
-// randomly shuffle byte array (Knuth-Fisher–Yates shuffle)
-static void rand_shuffle(uint8_t* arr, size_t n)
-{
-	assert(arr != 0);
-	assert(n != 0);
-
-	size_t i, j, tmp;
-	for(i = n - 1; i != 0; i--){
-		j = rand_range(0,i);
-		tmp = arr[j];
-		arr[j] = arr[i];
-		arr[i] = tmp;
+	int n = 0;
+	uint64_t r = 0;
+	for( size_t i = 0; i < size; i++ ){
+		if( --n < 0 ){ r = rand(); n = 14; }
+		buf[i] = (r & (1 << n)) ? 0x41 : 0x20;
 	}
-}
-
-
-// fill buf with random bytes and passed amount of whitespace
-static void fillwithtext(uint8_t* buf, size_t size, size_t num_spaces)
-{
-	assert(buf != 0);
-	assert(num_spaces <= size);
-
-	size_t i;
-	for(i = 0; i < num_spaces; i++){
-		buf[i] = (uint8_t)(0x090A0D20 >> (rand() & 0x18));
-	}
-	for(; i < size; i++){
-		uint8_t c;
-		do{
-			c = (uint8_t)rand();
-		}while(c == 0x09 || c == 0x0A || c == 0x0D || c == 0x20);
-		buf[i] = c; 
-	}
-	rand_shuffle(buf, size);	
 }
 
 
@@ -141,7 +98,7 @@ static void test_time(
 }
 
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 0x1000000
 int main(int argc, char ** argv)
 {
 	(void)argc;
@@ -152,12 +109,14 @@ int main(int argc, char ** argv)
 	static uint8_t src[BUF_SIZE];
 	static uint8_t dst[BUF_SIZE];
 	static uint8_t ans[BUF_SIZE];
-	size_t num_spaces = 128;
+	size_t num_spaces;
 	assert(num_spaces <= BUF_SIZE);
 
-	fillwithtext(src, BUF_SIZE, num_spaces);
-	despace_simple(ans, src, BUF_SIZE);
+	fillwithtext(src, BUF_SIZE);
+	num_spaces = BUF_SIZE - despace_simple(ans, src, BUF_SIZE);
+	gen_table_1mb();
 
+	/*
 	test_time( "despace_simple", &despace_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_branchless", &despace_branchless,
@@ -172,18 +131,17 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_detect", &despace_sse2_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	*/
 	test_time( "despace_ssse3_cumsum", &despace_ssse3_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_1kb", &despace_ssse3_lut_1kb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	//todo: the current benchmarked is improper
-	// for a table this big...?
-	gen_table_1mb();
 	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
+	/*
 	printf("\n%24s\n","---useless---");
 	test_time( "despace_setcc", &despace_setcc,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
@@ -199,6 +157,6 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-
+	*/
 	return 0;
 }
