@@ -15,14 +15,33 @@
 #include "useless.h"
 
 
-// fill buf with bytes... coinflip to choose either 0x41 or 0x20 
 static void fillwithtext(uint8_t* buf, size_t size)
 {
-	int n = 0;
-	uint64_t r = 0;
-	for( size_t i = 0; i < size; i++ ){
-		if( --n < 0 ){ r = rand(); n = 14; }
-		buf[i] = (r & (1 << n)) ? 0x41 : 0x20;
+	uint8_t space[] = { 0x09, 0x0A, 0x0D, 0x20 };
+	uint8_t nonspace[] = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+		0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46 };
+
+	for( size_t i = 0; i < size >> 4; i++ ){
+		for( size_t j = 0; j < 16; j++ ){
+			buf[i*16+j] = (i & (1 << j)) ?  space[rand() & 0x03] : nonspace[rand() & 0x0F];
+		}
+	}
+	for( size_t i = 0; i < size % 16; i++ ) buf[(size >> 4) * 16 + i] = 0x46;
+
+	if( size < 16 ) return;
+
+	for(size_t i = (size >> 4) - 1; i != 0; i--){
+		uint32_t j = 0;
+		uint32_t m = i;
+		m |= m >> 16; m |= m >> 8; m |= m >> 4; m |= m >> 2; m |= m >> 1;
+		do{
+			j = ((rand() << 15) ^ rand()) & m;
+		}while(j > i);
+
+		__m128i tmp_j = _mm_loadu_si128((__m128i*)&buf[j]);
+		__m128i tmp_i = _mm_loadu_si128((__m128i*)&buf[i]);
+		_mm_storeu_si128((__m128i*)&buf[j], tmp_i);
+		_mm_storeu_si128((__m128i*)&buf[i], tmp_j);
 	}
 }
 
@@ -94,11 +113,11 @@ static void test_time(
 		printf("BUG!!! "); fflush(0);
 	}
 	uint64_t t = best_time(fn_ptr, out, in, in_len);
-	printf("%5" PRIu64 "\n", t);
+	printf("%8" PRIu64 "\n", t);
 }
 
 
-#define BUF_SIZE 0x1000000
+#define BUF_SIZE 0x100000
 int main(int argc, char ** argv)
 {
 	(void)argc;
@@ -114,9 +133,8 @@ int main(int argc, char ** argv)
 
 	fillwithtext(src, BUF_SIZE);
 	num_spaces = BUF_SIZE - despace_simple(ans, src, BUF_SIZE);
-	gen_table_1mb();
+	printf( "buf_size: %d  num_spaces: %" PRIu64 "\n\n", BUF_SIZE, num_spaces );
 
-	/*
 	test_time( "despace_simple", &despace_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_branchless", &despace_branchless,
@@ -131,14 +149,9 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_detect", &despace_sse2_detect,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	*/
 	test_time( "despace_ssse3_cumsum", &despace_ssse3_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_1kb", &despace_ssse3_lut_1kb,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 
 	/*
@@ -156,6 +169,11 @@ int main(int argc, char ** argv)
 	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	gen_table_1mb();
+	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	*/
 	return 0;
