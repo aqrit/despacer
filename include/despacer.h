@@ -106,7 +106,6 @@ size_t despace_block_simple( void* dst_void, void* src_void, size_t length )
 
 	// do remaining bytes
 	dst += despace_branchless(dst, src, length);
-
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
@@ -149,10 +148,7 @@ size_t despace_block_mux( void* dst_void, void* src_void, size_t length )
 		*((uint64_t*)dst) = asrc;
 		dst += (8 - ws_cnt);
 	}
-
-	// do remaining bytes
 	dst += despace_branchless(dst, src, length);
-
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
@@ -181,10 +177,7 @@ size_t despace_sse2_detect( void* dst_void, void* src_void, size_t length )
 			m >>= 1;
 		}
 	}
-
-	// do remaining bytes
 	dst += despace_branchless(dst, src, length);
-
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
@@ -226,9 +219,8 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		size_t popcnt0 = 8 - _mm_cvtsi128_si32(cnt);
 		size_t popcnt1 = 8 - _mm_cvtsi128_si32(_mm_unpackhi_epi64(cnt, cnt));
 
-		//			
-		ws_FF = _mm_add_epi8(ws_FF, _mm_and_si128(ws_01, s)); 
-		s = _mm_andnot_si128(ws_FF, s);
+		//
+		s = _mm_andnot_si128(_mm_add_epi8(ws_FF, _mm_and_si128(ws_01, s)), s);
 		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_02, s), _mm_setzero_si128()), s), 16));
 		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_04, s), _mm_setzero_si128()), s), 32));
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(s, id));
@@ -322,18 +314,3 @@ size_t despace_ssse3_lut_1kb( void* dst_void, void* src_void, size_t length )
 
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
-
-
-__m128i lut_1mb [0x10000];
-void gen_table_1mb( void ){
-	for( size_t i = 0; i < 0x10000; i++ ){
-		uint8_t* p = (uint8_t*) &lut_1mb[i];
-		for( size_t j = 0; j < 16; j++ ){
-			if( !(i & (1 << j)) ){
-				*p++ = j;
-			}
-		}
-	}
-}
-
-

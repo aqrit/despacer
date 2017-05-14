@@ -336,6 +336,17 @@ size_t despace_ssse3_lut_512b( void* dst_void, void* src_void, size_t length )
 }
 
 
+__m128i lut_1mb [0x10000];
+void gen_table_1mb( void ){
+	for( size_t i = 0; i < 0x10000; i++ ){
+		uint8_t* p = (uint8_t*) &lut_1mb[i];
+		for( size_t j = 0; j < 16; j++ ){
+			if( !(i & (1 << j)) ){
+				*p++ = j;
+			}
+		}
+	}
+}
 size_t despace_ssse3_lut_1mb( void* dst_void, void* src_void, size_t length )
 {
 	__m128i * src = (__m128i *)src_void;
