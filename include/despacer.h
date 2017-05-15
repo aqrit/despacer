@@ -222,7 +222,7 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 		//
 		s = _mm_andnot_si128(_mm_add_epi8(ws_FF, _mm_and_si128(ws_01, s)), s);
 		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_02, s), _mm_setzero_si128()), s), 16));
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_04, s), _mm_setzero_si128()), s), 32));
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_andnot_si128(_mm_cmpgt_epi8(mask_04, s), s), 32));
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(s, id));
 
 		// store
