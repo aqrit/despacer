@@ -187,9 +187,12 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 	uint8_t* src = (uint8_t*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
+	const __m128i is_3or7 = _mm_setr_epi8(
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
 	const __m128i lut_cntrl = _mm_setr_epi8(
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
+		0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00);
 	const __m128i id = _mm_setr_epi8(
 		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F);
@@ -199,37 +202,49 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 	const __m128i mask_70 = _mm_set1_epi8(0x70);
 
 	for( ; length >= 16; length-=16 ){
+		__m128i a,b,c,d,s,t,v;
+		size_t cnt0, cnt1;
+
 		// load
-		__m128i v = _mm_loadu_si128((__m128i*)src);
+		v = _mm_loadu_si128((__m128i*)src);
 		src += 16;
 
-		// detect spaces
-		__m128i ws_FF = _mm_or_si128(_mm_cmpeq_epi8(mask_20, v),
+		// detect spaces ( 0x01 == space, 0x00 == non-space )
+		s = _mm_or_si128(_mm_abs_epi8(_mm_cmpeq_epi8(mask_20, v)),
 			_mm_shuffle_epi8(lut_cntrl, _mm_adds_epu8(mask_70, v)));
 
+		// create non-space mask ( 0x00 == space, 0xFF == non-space )
+		b = _mm_cmpeq_epi8(_mm_setzero_si128(), s);
+
 		// (qword) prefix sum of spaces
-		__m128i ws_01 = _mm_abs_epi8( ws_FF );
-		__m128i s = ws_01;
 		s = _mm_add_epi8(s, _mm_slli_epi64(s, 8));
 		s = _mm_add_epi8(s, _mm_slli_epi64(s, 16));
 		s = _mm_add_epi8(s, _mm_slli_epi64(s, 32));
 
 		// get non-space byte totals
-		__m128i cnt = _mm_srli_epi64(s, 56);
-		size_t popcnt0 = 8 - _mm_cvtsi128_si32(cnt);
-		size_t popcnt1 = 8 - _mm_cvtsi128_si32(_mm_unpackhi_epi64(cnt, cnt));
+		t = _mm_srli_epi64(s, 56); // hi-byte is total_spaces
+		cnt0 = 8 - _mm_cvtsi128_si64(t);
+		t = _mm_unpackhi_epi64(t, t);
+		cnt1 = 8 - _mm_cvtsi128_si64(t);
 
+		// compress
+		b = _mm_andnot_si128(b, s); // zero non-spaces
 		//
-		s = _mm_andnot_si128(_mm_add_epi8(ws_FF, _mm_and_si128(ws_01, s)), s);
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_and_si128(_mm_cmpgt_epi8(_mm_and_si128(mask_02, s), _mm_setzero_si128()), s), 16));
-		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_andnot_si128(_mm_cmpgt_epi8(mask_04, s), s), 32));
+		c = _mm_srli_epi64(_mm_and_si128(mask_02, b), 9);
+		d = _mm_srli_epi64(_mm_shuffle_epi8(is_3or7, b), 16);
+		a = _mm_or_si128(_mm_cmpgt_epi8(mask_04, s), _mm_cmpeq_epi8(b, mask_04)); // match first 4 and below
+		//
+		s = _mm_add_epi8(s, c);
+		s = _mm_add_epi8(s, d);
+		//
+		s = _mm_max_epu8(s, _mm_srli_epi64(_mm_andnot_si128(a, s), 32));
 		v = _mm_shuffle_epi8(v, _mm_add_epi8(s, id));
 
 		// store
 		_mm_storel_epi64((__m128i*)dst, v);
-		dst += popcnt0;
+		dst += cnt0;
 		_mm_storel_epi64((__m128i*)dst, _mm_unpackhi_epi64(v, v));
-		dst += popcnt1;
+		dst += cnt1;
 	}
 	dst += despace_branchless(dst, src, length);
 	return (size_t)(dst - ((uint8_t*)dst_void));
