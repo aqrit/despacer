@@ -10,6 +10,7 @@
 #include <tmmintrin.h> // ssse3
 #include <smmintrin.h> // sse41
 #include <nmmintrin.h> // sse42
+#include <immintrin.h> // avx2
 
 #include "despacer.h"
 #include "useless.h"
@@ -113,11 +114,11 @@ static void test_time(
 		printf("BUG!!! "); fflush(0);
 	}
 	uint64_t t = best_time(fn_ptr, out, in, in_len);
-	printf("%8" PRIu64 "\n", t);
+	printf("%10" PRIu64 "\n", t);
 }
 
 
-#define BUF_SIZE 0x100000
+#define BUF_SIZE 0x8000000
 int main(int argc, char ** argv)
 {
 	(void)argc;
@@ -134,6 +135,8 @@ int main(int argc, char ** argv)
 	fillwithtext(src, BUF_SIZE);
 	num_spaces = BUF_SIZE - despace_simple(ans, src, BUF_SIZE);
 	printf( "buf_size: %d  num_spaces: %" PRIu64 "\n\n", BUF_SIZE, num_spaces );
+
+	gen_table_1mb();
 
 	test_time( "despace_simple", &despace_simple,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
@@ -153,9 +156,16 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_1kb", &despace_ssse3_lut_1kb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-
+	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	/*
+	test_time( "despace_avx2_lut_1mb", &despace_avx2_lut_1mb,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	test_time( "despace_avx2_vpermd", &despace_avx2_vpermd,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+	*/
 	printf("\n%24s\n","---useless---");
+	gen_table_1mb_2();
 	test_time( "despace_setcc", &despace_setcc,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_block_shift", &despace_block_shift,
@@ -168,13 +178,10 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_sse2_cumsum", &despace_sse2_cumsum,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	test_time( "despace_sse41_cumsum", &despace_sse41_cumsum,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	gen_table_1mb();
-	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
-		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_512b", &despace_ssse3_lut_512b,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	*/
+	test_time( "despace_ssse3_lut_1mb_2", &despace_ssse3_lut_1mb_2,
+		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
+
 	return 0;
 }
