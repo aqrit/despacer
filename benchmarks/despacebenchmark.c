@@ -158,12 +158,11 @@ int main(int argc, char ** argv)
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_ssse3_lut_1mb", &despace_ssse3_lut_1mb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	/*
 	test_time( "despace_avx2_lut_1mb", &despace_avx2_lut_1mb,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
 	test_time( "despace_avx2_vpermd", &despace_avx2_vpermd,
 		dst, src, BUF_SIZE, ans, BUF_SIZE - num_spaces );
-	*/
+
 	printf("\n%24s\n","---useless---");
 	gen_table_1mb_2();
 	test_time( "despace_setcc", &despace_setcc,
