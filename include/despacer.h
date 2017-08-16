@@ -201,13 +201,12 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 	const __m128i mask_20 = _mm_slli_epi64(mask_02, 4);
 	const __m128i mask_70 = _mm_set1_epi8(0x70);
 
-	for( ; length >= 16; length-=16 ){
+	for( uint8_t* end = &src[(length & ~15)]; src != end; src += 16){
 		__m128i a,b,c,d,s,t,v;
 		size_t cnt0, cnt1;
 
 		// load
 		v = _mm_loadu_si128((__m128i*)src);
-		src += 16;
 
 		// detect spaces ( 0x01 == space, 0x00 == non-space )
 		s = _mm_or_si128(_mm_abs_epi8(_mm_cmpeq_epi8(mask_20, v)),
@@ -223,9 +222,9 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 
 		// get non-space byte totals
 		t = _mm_srli_epi64(s, 56); // hi-byte is total_spaces
-		cnt0 = 8 - _mm_cvtsi128_si64(t);
+		cnt0 = (uint32_t)_mm_cvtsi128_si32(t);
 		t = _mm_unpackhi_epi64(t, t);
-		cnt1 = 8 - _mm_cvtsi128_si64(t);
+		cnt1 = (uint32_t)_mm_cvtsi128_si32(t);
 
 		// compress
 		b = _mm_andnot_si128(b, s); // zero non-spaces
@@ -242,18 +241,18 @@ size_t despace_ssse3_cumsum( void* dst_void, void* src_void, size_t length )
 
 		// store
 		_mm_storel_epi64((__m128i*)dst, v);
-		dst += cnt0;
+		dst += 8 - cnt0;
 		_mm_storel_epi64((__m128i*)dst, _mm_unpackhi_epi64(v, v));
-		dst += cnt1;
+		dst += 8 - cnt1;
 	}
-	dst += despace_branchless(dst, src, length);
+	dst += despace_branchless(dst, src, length & 15);
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
 size_t despace_ssse3_lut_1kb( void* dst_void, void* src_void, size_t length )
 {
-	__m128i * src = (__m128i *)src_void;
+	uint8_t* src = (uint8_t*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
 	static const uint64_t table[128] __attribute__((aligned(64))) = {
@@ -297,33 +296,26 @@ size_t despace_ssse3_lut_1kb( void* dst_void, void* src_void, size_t length )
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
 
-	for( ; length >= 16; length-=16 ){
-		// load
-		__m128i vector0 = _mm_loadu_si128(src++);
-		__m128i vector1 = _mm_unpackhi_epi64(vector0, vector0);
+	for( uint8_t* end = &src[(length & ~15)]; src != end; src += 16){
+		__m128i vector0 = _mm_loadu_si128((__m128i*)src);
+		__m128i vector1 = _mm_shuffle_epi32( vector0, 0x0E );
 
-		// detect spaces
 		__m128i bytemask0 = _mm_or_si128(_mm_cmpeq_epi8(mask_20, vector0),
 			_mm_shuffle_epi8(lut_cntrl, _mm_adds_epu8(mask_70, vector0)));
 
-		// sort (compress)
-		uint32_t bitmask0 = _mm_movemask_epi8(bytemask0);
-		vector0 = _mm_shuffle_epi8(vector0, _mm_loadl_epi64((__m128i*) &table[bitmask0 & 0x7F]));
-		vector1 = _mm_shuffle_epi8(vector1, _mm_loadl_epi64((__m128i*) &table[(bitmask0 >> 8) & 0x7F]));
-
-		// count non-spaces
+		uint32_t bitmask0 = _mm_movemask_epi8(bytemask0) & 0x7F7F;
 		__m128i hsum = _mm_sad_epu8(_mm_add_epi8(bytemask0, mask_01), _mm_setzero_si128());
 
-		// store
+		vector0 = _mm_shuffle_epi8(vector0, _mm_loadl_epi64((__m128i*) &table[(uint8_t)bitmask0]));
 		_mm_storel_epi64((__m128i*)dst, vector0);
-		dst += _mm_cvtsi128_si64(hsum);
+		dst += (uint32_t)_mm_cvtsi128_si32(hsum);
+
+		vector1 = _mm_shuffle_epi8(vector1, _mm_loadl_epi64((__m128i*) &table[bitmask0 >> 8]));
 		_mm_storel_epi64((__m128i*)dst, vector1);
-		dst += _mm_cvtsi128_si64(_mm_unpackhi_epi64(hsum, hsum));
+		dst += (uint32_t)_mm_cvtsi128_si32(_mm_unpackhi_epi64(hsum, hsum));
 	}
 
-	// do remaining bytes
-	dst += despace_branchless(dst, src, length);
-
+	dst += despace_branchless(dst, src, length & 15);
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
@@ -341,7 +333,7 @@ void gen_table_1mb( void ){
 }
 size_t despace_ssse3_lut_1mb( void* dst_void, void* src_void, size_t length )
 {
-	__m128i * src = (__m128i *)src_void;
+	uint8_t* src = (uint8_t*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
 	const __m128i mask_01 = _mm_abs_epi8(_mm_cmpeq_epi8(_mm_setzero_si128(),_mm_setzero_si128()));
@@ -351,18 +343,17 @@ size_t despace_ssse3_lut_1mb( void* dst_void, void* src_void, size_t length )
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00);
 
-	for( ; length >= 16; length-=16 ){
-		__m128i v = _mm_loadu_si128(src++);
+	for( uint8_t* end = &src[(length & ~15)]; src != end; src += 16){
+		__m128i v = _mm_loadu_si128((__m128i*)src);
 		__m128i bytemask = _mm_or_si128(_mm_cmpeq_epi8(mask_20, v),
 			_mm_shuffle_epi8(lut_cntrl, _mm_adds_epu8(mask_70, v)));
-		int bitmask = _mm_movemask_epi8(bytemask);
+		uint32_t bitmask = _mm_movemask_epi8(bytemask);
 		v = _mm_shuffle_epi8(v, _mm_load_si128(&lut_1mb[bitmask]));
 		_mm_storeu_si128((__m128i*)dst, v);
 		__m128i hsum = _mm_sad_epu8(_mm_add_epi8(bytemask, mask_01), _mm_setzero_si128());
-		hsum = _mm_add_epi64(hsum, _mm_unpackhi_epi64(hsum, hsum));
-		dst += _mm_cvtsi128_si64(hsum);
+		dst += ((uint32_t)_mm_cvtsi128_si32(hsum)) + ((uint32_t)_mm_cvtsi128_si32(_mm_unpackhi_epi64(hsum, hsum)));
 	}
-	dst += despace_branchless(dst, src, length);
+	dst += despace_branchless(dst, src, length & 15);
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
@@ -400,11 +391,10 @@ size_t despace_avx2_vpermd( void* dst_void, void* src_void, size_t length )
 		0x07060504  // 0x00'000000, 0x'07060504
 	);
 
-	for( ; length >= 32; length-=32 ){
+	for( uint8_t* end = &src[(length & ~31)]; src != end; src += 32){
 		__m256i r0,r1,r2,r3,r4;
 
 		r0 = _mm256_loadu_si256((__m256i *)src); // asrc
-		src += 32;
 
 		r1 = _mm256_adds_epu8(mask_70, r0);
 		r2 = _mm256_cmpeq_epi8(mask_20, r0);
@@ -432,14 +422,14 @@ size_t despace_avx2_vpermd( void* dst_void, void* src_void, size_t length )
 		*((uint64_t*)dst) = _mm256_extract_epi64(r0, 3);
 		dst += _mm256_extract_epi64(r4, 3);
 	}
-	dst += despace_branchless(dst, src, length);
+	dst += despace_branchless(dst, src, length & 31);
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
 
 
 size_t despace_avx2_lut_1mb( void* dst_void, void* src_void, size_t length )
 {
-	__m256i* src = (__m256i*)src_void;
+	uint8_t* src = (uint8_t*)src_void;
 	uint8_t* dst = (uint8_t*)dst_void;
 
 	const __m256i mask_70 = _mm256_set1_epi8( 0x70 );
@@ -452,8 +442,8 @@ size_t despace_avx2_lut_1mb( void* dst_void, void* src_void, size_t length )
 		0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00
 		);
 
-	for( ; length >= 32; length-=32 ){
-		__m256i v = _mm256_loadu_si256(src++);
+	for( uint8_t* end = &src[(length & ~31)]; src != end; src += 32){
+		__m256i v = _mm256_loadu_si256((__m256i*)src);
 		__m256i bytemask = _mm256_or_si256(_mm256_cmpeq_epi8(mask_20, v),
 			_mm256_shuffle_epi8(lut_cntrl, _mm256_adds_epu8(mask_70, v)));
 		uint32_t bitmask = _mm256_movemask_epi8(bytemask);
@@ -461,7 +451,6 @@ size_t despace_avx2_lut_1mb( void* dst_void, void* src_void, size_t length )
 		_mm_storeu_si128((__m128i*)&dst[16 - _mm_popcnt_u32(bitmask & 0xFFFF)], _mm_shuffle_epi8(_mm256_extracti128_si256(v,1), _mm_load_si128(&lut_1mb[(bitmask >> 16)])));
 		dst += (32 - _mm_popcnt_u32(bitmask));
 	}
-	dst += despace_branchless(dst, src, length);
+	dst += despace_branchless(dst, src, length & 31);
 	return (size_t)(dst - ((uint8_t*)dst_void));
 }
-
